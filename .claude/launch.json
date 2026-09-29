@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "potong-kue",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "D:\\BACKUP\\SEKOLAH\\INTERN\\INSTITUT ASIA\\MASA DEPAN\\BUSINESS WISDOM INSTITUTE\\TRAINER ASSISTANT\\GAME DONE BWI\\POTONG KUE"],
+      "port": 8765
+    }
+  ]
+}

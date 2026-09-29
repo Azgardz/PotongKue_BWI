@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Tantangan Potong Kue</title>
+  <meta name="description" content="Potong kue menjadi 8 bagian sama besar hanya dengan 3 kali potong.">
+  <link rel="icon" href="assets/icon-cake.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800;9..144,900&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="pre">
+
+  <canvas id="scene" aria-label="Kue 3D di atas meja marmer"></canvas>
+
+  <svg id="drag-layer" aria-hidden="true">
+    <line id="drag-line" x1="0" y1="0" x2="0" y2="0"></line>
+  </svg>
+  <img id="knife-cursor" src="assets/icon-knife.png" alt="" aria-hidden="true">
+
+  <!-- Header -->
+  <header class="hud" id="hud">
+    <div class="title-block">
+      <img class="title-icon" src="assets/icon-cake.png" alt="">
+      <div>
+        <h1>Tantangan Potong Kue</h1>
+        <p>3 kali potong. 8 bagian. Semuanya harus sama besar.</p>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <img src="assets/icon-knife.png" alt="">
+        <div class="stat-text">
+          <span class="stat-label">Sisa Potong</span>
+          <span class="stat-value" id="cuts-left">3</span>
+        </div>
+      </div>
+      <div class="stat">
+        <img src="assets/icon-slice.png" alt="">
+        <div class="stat-text">
+          <span class="stat-label">Bagian Saat Ini</span>
+          <span class="stat-value" id="piece-count">1</span>
+        </div>
+      </div>
+      <div class="stat">
+        <img src="assets/icon-stopwatch.png" alt="">
+        <div class="stat-text">
+          <span class="stat-label">Waktu</span>
+          <span class="stat-value" id="timer">00:00</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Bottom dock -->
+  <nav class="dock" id="dock" aria-label="Kontrol permainan">
+    <div class="seg" role="group" aria-label="Mode interaksi">
+      <button type="button" id="mode-cut" class="active" aria-pressed="true">
+        <img src="assets/icon-knife.png" alt=""><span>Potong</span>
+      </button>
+      <button type="button" id="mode-rotate" aria-pressed="false">
+        <img class="tint" src="assets/icon-rotate.png" alt=""><span>Putar</span>
+      </button>
+    </div>
+    <button type="button" class="round" id="btn-undo" disabled>
+      <span class="round-face"><img class="tint" src="assets/icon-undo.png" alt=""></span>
+      <span class="round-label">Undo</span>
+    </button>
+    <button type="button" class="round" id="btn-explode" aria-pressed="false">
+      <span class="round-face"><img class="tint" src="assets/icon-layers.png" alt=""></span>
+      <span class="round-label" id="explode-label">Pisahkan</span>
+    </button>
+    <button type="button" class="round" id="btn-reset">
+      <span class="round-face"><img class="tint" src="assets/icon-reset.png" alt=""></span>
+      <span class="round-label">Reset</span>
+    </button>
+  </nav>
+
+  <button type="button" id="reopen-result" class="pill-btn" hidden>Lihat Hasil</button>
+
+  <!-- Opening popup -->
+  <div class="backdrop" id="intro">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+      <span class="tag">Spatial Puzzle</span>
+      <h2 id="intro-title">3 Cuts. 8 Equal Pieces.</h2>
+      <p class="lead">Potong kue menjadi 8 bagian sama besar hanya dengan 3 kali potong.</p>
+      <div class="tiles">
+        <div class="tile">
+          <img src="assets/cake-normal.png" alt="">
+          <span class="num">1</span><span class="cap">Kue</span>
+        </div>
+        <div class="tile">
+          <img src="assets/icon-knife.png" alt="">
+          <span class="num">3</span><span class="cap">Potongan</span>
+        </div>
+        <div class="tile">
+          <img src="assets/icon-slice.png" alt="">
+          <span class="num">8</span><span class="cap">Bagian Sama Besar</span>
+        </div>
+      </div>
+      <div class="howto">
+        <span class="info-dot" aria-hidden="true">i</span>
+        <p>Tarik garis pada kue untuk memotong. Gunakan <b>Putar</b>, klik kanan, atau dua jari untuk mengubah sudut pandang.</p>
+      </div>
+      <form class="player-form" id="player-form" novalidate>
+        <label class="field">
+          <span class="field-label">Nama</span>
+          <input id="in-name" name="name" type="text" maxlength="30" autocomplete="name" placeholder="Nama kamu" required>
+        </label>
+        <label class="field">
+          <span class="field-label">Tim / Instansi <em>(opsional)</em></span>
+          <input id="in-team" name="team" type="text" maxlength="40" autocomplete="organization" placeholder="Contoh: Tim A">
+        </label>
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+        <button type="submit" class="cta" id="btn-start">Mulai Tantangan <span aria-hidden="true">→</span></button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Result popup -->
+  <div class="backdrop" id="result" hidden>
+    <div class="modal result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
+      <span class="tag" id="result-tag">Hasil</span>
+      <h2 id="result-title">Tantangan belum berhasil.</h2>
+      <p class="lead" id="result-sub"></p>
+      <div class="rstats">
+        <div class="rstat"><span class="rstat-label">Bagian</span><span class="rstat-value" id="r-pieces">0 / 8</span></div>
+        <div class="rstat"><span class="rstat-label">Keseimbangan</span><span class="rstat-value" id="r-balance">—</span></div>
+        <div class="rstat"><span class="rstat-label">Waktu</span><span class="rstat-value" id="r-time">00:00</span></div>
+      </div>
+      <p class="rank-line" id="r-rank" hidden></p>
+      <div class="dist">
+        <div class="dist-head"><span>Ukuran tiap bagian</span><span class="ideal-key">ideal 12,5%</span></div>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="result-actions">
+        <button type="button" class="ghost-btn" id="btn-view">Lihat Kue</button>
+        <button type="button" class="cta" id="btn-again">Main Lagi</button>
+      </div>
+      <div class="result-links">
+        <a id="link-board" href="leaderboard.html" target="_blank" rel="noopener">Lihat Leaderboard ↗</a>
+        <button type="button" class="link-btn" id="btn-switch">Ganti Pemain</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="loader">
+    <img src="assets/cake-normal.png" alt="">
+    <p class="loader-text">Menyiapkan dapur…</p>
+  </div>
+
+  <script src="js/firebase-lb.js"></script>
+  <script src="js/kitchen.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

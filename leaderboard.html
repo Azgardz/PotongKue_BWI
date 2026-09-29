@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Leaderboard — Tantangan Potong Kue</title>
+  <link rel="icon" href="assets/icon-cake.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800;9..144,900&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/leaderboard.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="brand">
+        <img src="assets/icon-cake.png" alt="">
+        <div>
+          <p class="eyebrow">Tantangan Potong Kue</p>
+          <h1>Leaderboard</h1>
+        </div>
+      </div>
+    </header>
+
+    <section class="summary" id="summary" hidden>
+      <div class="chip"><span class="chip-label">Pemain</span><span class="chip-value" id="s-players">0</span></div>
+      <div class="chip"><span class="chip-label">Berhasil</span><span class="chip-value" id="s-success">0</span></div>
+      <div class="chip"><span class="chip-label">Percobaan</span><span class="chip-value" id="s-attempts">0</span></div>
+      <div class="live" id="live"><span class="dot"></span><span id="live-text">Menghubungkan…</span></div>
+    </section>
+
+    <section class="board" id="board">
+      <div class="empty" id="empty">
+        <img src="assets/cake-normal.png" alt="">
+        <p id="empty-text">Memuat skor…</p>
+      </div>
+      <table id="table" hidden>
+        <thead>
+          <tr>
+            <th class="c-rank">#</th>
+            <th class="c-name">Pemain</th>
+            <th class="c-status">Hasil</th>
+            <th class="c-num">Waktu</th>
+            <th class="c-num c-bal">Keseimbangan</th>
+            <th class="c-num c-tries">Percobaan</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+
+    <footer class="share" id="share" hidden>
+      <span class="share-label">Link untuk peserta:</span>
+      <code id="share-url"></code>
+      <button type="button" id="copy-btn">Salin</button>
+      <a id="play-link" href="index.html" target="_blank" rel="noopener">Buka game ↗</a>
+    </footer>
+  </main>
+
+  <script src="js/firebase-lb.js"></script>
+  <script src="js/leaderboard-page.js"></script>
+</body>
+</html>

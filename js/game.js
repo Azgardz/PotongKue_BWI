@@ -59,8 +59,13 @@
   // ---------------------------------------------------------------------------
   const canvas = $('#scene');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // Start at up to 1.5x and step down automatically if the device struggles.
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+  const MIN_PIXEL_RATIO = 0.75;
+  renderer.setPixelRatio(pixelRatio);
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.autoUpdate = false; // the sun is fixed; redraw shadows only when pieces move
+  renderer.shadowMap.needsUpdate = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.94;
@@ -434,7 +439,7 @@
 
   // Piped star-tip rosette: 8 sharp ridges twisting up to a curled tip.
   function rosetteGeometry() {
-    const rings = 48, segs = 128, height = 0.25, base = 0.17;
+    const rings = 28, segs = 72, height = 0.25, base = 0.17;
     const pos = [], idx = [];
     for (let i = 0; i <= rings; i++) {
       const t = i / rings;
@@ -488,15 +493,15 @@
       [R + 0.029, H - 0.015], [R + 0.026, H + 0.008], [R + 0.014, H + 0.024], [R - 0.006, H + 0.031],
       [R - 0.04, H + 0.022], [R - 0.1, H + 0.009], [R - 0.2, H + 0.0015],
     ];
-    parts.push(new THREE.LatheGeometry(lip.map(([x, y]) => new THREE.Vector2(x, y)), 320));
+    parts.push(new THREE.LatheGeometry(lip.map(([x, y]) => new THREE.Vector2(x, y)), 180));
     const N = 22;
     for (let i = 0; i < N; i++) {
       const a = ((i + (rng() - 0.5) * 0.4) / N) * Math.PI * 2;
       const len = 0.08 + Math.pow(rng(), 1.3) * 0.36;
       const rad = 0.034 + rng() * 0.016;
-      const cap = new THREE.CapsuleGeometry(rad, len, 6, 14);
+      const cap = new THREE.CapsuleGeometry(rad, len, 4, 10);
       cap.scale(0.62, 1, 1);
-      const bulb = new THREE.SphereGeometry(rad * 1.2, 14, 10);
+      const bulb = new THREE.SphereGeometry(rad * 1.2, 10, 8);
       bulb.scale(0.66, 1.05, 1);
       bulb.translate(0, -len / 2 + rad * 0.15, 0);
       const y = H - 0.06 - len / 2;
@@ -513,6 +518,7 @@
   const CRUMB_N = 1100;
   const crumbGeo = new THREE.DodecahedronGeometry(1, 0);
   const crumbTemplate = new THREE.InstancedMesh(crumbGeo, crumbMat, CRUMB_N);
+  const crumbPos = [];
   {
     const d = new THREE.Object3D();
     const c = new THREE.Color();
@@ -527,6 +533,7 @@
       d.rotation.set(rng() * 3, rng() * 3, rng() * 3);
       d.scale.set(sz * (0.8 + rng() * 0.5), sz * (0.6 + rng() * 0.5), sz * (0.8 + rng() * 0.5));
       d.updateMatrix();
+      crumbPos.push(d.position.clone());
       crumbTemplate.setMatrixAt(i, d.matrix);
       crumbTemplate.setColorAt(i, c.copy(dark).lerp(light, Math.pow(rng(), 1.6)));
     }
@@ -587,6 +594,12 @@
 
   // Visual layer: pieceId -> { mesh, piece, cur, target }
   const visuals = new Map();
+  const tmpM4 = new THREE.Matrix4();
+  const tmpCol = new THREE.Color();
+
+  // Render on demand: frames are only drawn while something moves or changed.
+  let dirty = 3;
+  function invalidate() { dirty = 3; }
 
   function syncVisuals() {
     const alive = new Set(state.pieces.map((p) => p.id));
@@ -610,21 +623,30 @@
       // so decorations split exactly where the cake does.
       const planes = p.planes.map(() => new THREE.Plane());
       const gMat = ganacheMat.clone();
-      const cMat = crumbMat.clone();
-      for (const m of [gMat, cMat]) { m.clippingPlanes = planes; m.clipShadows = true; }
+      gMat.clippingPlanes = planes;
+      gMat.clipShadows = true;
       const deco = new THREE.Group();
       const shell = new THREE.Mesh(shellGeo, gMat);
       shell.castShadow = true;
       shell.receiveShadow = true;
-      const crumbsMesh = new THREE.InstancedMesh(crumbGeo, cMat, CRUMB_N);
-      crumbsMesh.instanceMatrix = crumbTemplate.instanceMatrix;
-      crumbsMesh.instanceColor = crumbTemplate.instanceColor;
+      // Crumbs are tiny, so each one simply belongs to the piece holding its centre
+      // (no clipping): a piece draws only its own crumbs instead of all of them.
+      const owned = [];
+      for (let i = 0; i < CRUMB_N; i++) {
+        if (p.planes.every((pl) => pl.n.dot(crumbPos[i]) - pl.d >= 0)) owned.push(i);
+      }
+      const crumbsMesh = new THREE.InstancedMesh(crumbGeo, crumbMat, Math.max(1, owned.length));
+      owned.forEach((ix, j) => {
+        crumbTemplate.getMatrixAt(ix, tmpM4); crumbsMesh.setMatrixAt(j, tmpM4);
+        crumbTemplate.getColorAt(ix, tmpCol); crumbsMesh.setColorAt(j, tmpCol);
+      });
+      crumbsMesh.count = owned.length;
       crumbsMesh.receiveShadow = true;
       crumbsMesh.frustumCulled = false;
       deco.add(shell, crumbsMesh);
       deco.position.copy(start);
       cakeGroup.add(deco);
-      visuals.set(p.id, { mesh, deco, planes, mats: [gMat, cMat], piece: p, cur: start, target: new V3() });
+      visuals.set(p.id, { mesh, deco, crumbs: crumbsMesh, planes, mats: [gMat], piece: p, cur: start, target: new V3() });
     }
     for (const [id, vis] of visuals) {
       if (alive.has(id)) continue;
@@ -633,12 +655,16 @@
     }
     for (const p of state.pieces) for (const r of p.rosettes) rosettes[r].owner = p.id;
     updateTargets();
+    renderer.shadowMap.needsUpdate = true;
+    invalidate();
   }
 
   function disposeVisual(vis) {
     cakeGroup.remove(vis.mesh, vis.deco);
     vis.mesh.geometry.dispose();
+    vis.crumbs.dispose();
     for (const m of vis.mats) m.dispose();
+    invalidate();
   }
 
   // Clip planes live in world space, so they follow each piece's visual offset.
@@ -866,6 +892,7 @@
     const hgt = Math.abs(n.y) < 0.5 ? H * 1.8 : R * 2 * 1.3;
     preview.scale.set(w, hgt, 1);
     preview.visible = true;
+    invalidate();
   }
 
   const CRUMBS = 40;
@@ -1332,6 +1359,7 @@
     ui.knife.classList.remove('on');
     document.body.classList.remove('orbiting');
     if (previewFlash <= 0) preview.visible = false;
+    invalidate();
   }
 
   function drawStroke(a, b) {
@@ -1450,6 +1478,7 @@
     cam.rMin = 4.4;
     cam.rMax = Math.max(12, defaultRadius() * 1.3);
     updateHudOffset();
+    invalidate();
   }
   window.addEventListener('resize', onResize);
   loadPlayer();
@@ -1461,14 +1490,43 @@
 
   let last = performance.now();
   let lastSecond = -1;
+  let renderedLast = false;
+  let slowTime = 0, slowFrames = 0;
+
+  function sceneBusy() {
+    if (cam.shake > 0 || cam.autoOrbit > 0 || previewFlash > 0) return true;
+    if (Math.abs(cam.taz - cam.az) + Math.abs(cam.tel - cam.el) + Math.abs(cam.tr - cam.r) > 1e-4) return true;
+    for (const c of crumbs) if (c.life > 0) return true;
+    return false;
+  }
+
+  // Lower the resolution a step when frames keep taking longer than ~24 ms.
+  function adaptQuality(rawDt) {
+    if (!renderedLast || pixelRatio <= MIN_PIXEL_RATIO) return;
+    slowTime += rawDt; slowFrames++;
+    if (slowFrames < 45) return;
+    const avg = slowTime / slowFrames;
+    slowTime = 0; slowFrames = 0;
+    if (avg > 0.024) {
+      pixelRatio = Math.max(MIN_PIXEL_RATIO, Math.round((pixelRatio - 0.25) * 100) / 100);
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      renderer.shadowMap.needsUpdate = true;
+      console.info('Kualitas grafis diturunkan, pixel ratio =', pixelRatio);
+    }
+  }
+
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const rawDt = (now - last) / 1000;
+    const dt = Math.min(0.05, rawDt);
     last = now;
 
     updateCamera(dt);
 
+    let piecesMoving = false;
     const k = 1 - Math.exp(-dt * 11);
     for (const vis of visuals.values()) {
+      if (vis.cur.distanceToSquared(vis.target) > 1e-9) piecesMoving = true;
       vis.cur.lerp(vis.target, k);
       vis.mesh.position.copy(vis.cur);
       vis.deco.position.copy(vis.cur);
@@ -1493,7 +1551,16 @@
       if (sec !== lastSecond) { lastSecond = sec; ui.timer.textContent = fmtTime(state.elapsedMs); }
     }
 
-    renderer.render(scene, camera);
+    const busy = piecesMoving || sceneBusy();
+    if (busy || dirty > 0) {
+      if (piecesMoving) renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, camera);
+      if (busy) adaptQuality(rawDt); else { slowTime = 0; slowFrames = 0; }
+      renderedLast = true;
+      if (dirty > 0) dirty--;
+    } else {
+      renderedLast = false;
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame((t) => {
